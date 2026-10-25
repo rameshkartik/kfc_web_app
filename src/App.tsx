@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { Link, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { ShoppingBasket, Menu, X, ArrowRight, Trash2, Minus, Plus, ShieldCheck, Truck, Clock3, Leaf } from "lucide-react";
 
@@ -26,8 +26,8 @@ function useCart() {
   return { cart, add, change, remove, count: cart.reduce((n, x) => n + x.quantity, 0) };
 }
 type CartState = ReturnType<typeof useCart>;
-const CartContext = { current: null as CartState | null };
-function cartState() { if (!CartContext.current) throw Error("Cart unavailable"); return CartContext.current; }
+const CartContext = createContext<CartState | null>(null);
+function cartState() { const value = useContext(CartContext); if (!value) throw Error("Cart unavailable"); return value; }
 function Layout({ children }: { children: React.ReactNode }) {
   const [menu, setMenu] = useState(false);
   const { count } = cartState();
@@ -49,7 +49,6 @@ function PrivateOrders({ title }: { title: string }) { return <div className="co
 function Admin() { return <div className="container page narrow"><h1>Staff dashboard</h1><Note>Admin access is disabled until Supabase Auth, staff roles and database Row Level Security are configured. No customer or order data is exposed.</Note></div>; }
 function NotFound() { return <div className="container page narrow"><h1>Page not found</h1><Link to="/" className="btn">Go home</Link></div>; }
 export default function App() {
-  const c = useCart(); CartContext.current = c;
-  const routes = useMemo(() => <Routes><Route path="/" element={<Home/>}/><Route path="/shop" element={<Shop/>}/><Route path="/products/:slug" element={<Detail/>}/><Route path="/cart" element={<Cart/>}/><Route path="/checkout" element={<Checkout/>}/><Route path="/orders/confirmation" element={<PrivateOrders title="Order confirmation"/>}/><Route path="/track" element={<PrivateOrders title="Track order"/>}/><Route path="/my-orders" element={<PrivateOrders title="My orders"/>}/><Route path="/contact" element={<Contact/>}/>{["privacy","terms","refund-policy","shipping-policy"].map(kind => <Route key={kind} path={`/${kind}`} element={<Policies kind={kind}/>}/>)}{["/admin", "/admin/login", "/admin/orders", "/admin/products", "/admin/delivery", "/admin/settings"].map(path => <Route key={path} path={path} element={<Admin/>}/>)}<Route path="*" element={<NotFound/>}/></Routes>, []);
-  return <Layout>{routes}</Layout>;
+  const c = useCart();
+  return <CartContext.Provider value={c}><Layout><Routes><Route path="/" element={<Home/>}/><Route path="/shop" element={<Shop/>}/><Route path="/products/:slug" element={<Detail/>}/><Route path="/cart" element={<Cart/>}/><Route path="/checkout" element={<Checkout/>}/><Route path="/orders/confirmation" element={<PrivateOrders title="Order confirmation"/>}/><Route path="/track" element={<PrivateOrders title="Track order"/>}/><Route path="/my-orders" element={<PrivateOrders title="My orders"/>}/><Route path="/contact" element={<Contact/>}/>{["privacy","terms","refund-policy","shipping-policy"].map(kind => <Route key={kind} path={`/${kind}`} element={<Policies kind={kind}/>}/>)}{["/admin", "/admin/login", "/admin/orders", "/admin/products", "/admin/delivery", "/admin/settings"].map(path => <Route key={path} path={path} element={<Admin/>}/>)}<Route path="*" element={<NotFound/>}/></Routes></Layout></CartContext.Provider>;
 }
