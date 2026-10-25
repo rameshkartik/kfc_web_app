@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
-export const headers = { "Access-Control-Allow-Origin": Deno.env.get("SITE_ORIGIN") || "http://localhost:5173", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+export const headers = { "Access-Control-Allow-Origin": Deno.env.get("SITE_ORIGIN") || "http://localhost:5173", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
 export function json(value: unknown, status=200) { return new Response(JSON.stringify(value), {status, headers: {...headers, "Content-Type":"application/json", "Cache-Control":"no-store"}}); }
 export function adminClient() {
   const url=Deno.env.get("SUPABASE_URL"), key=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
