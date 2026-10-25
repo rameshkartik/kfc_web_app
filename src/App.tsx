@@ -1,16 +1,38 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
-import { ShoppingBasket, Menu, X, ArrowRight, Trash2, Minus, Plus, ShieldCheck, Truck, Clock3, Leaf } from "lucide-react";
+import { ShoppingBasket, Menu, X, ArrowRight, Trash2, Minus, Plus, Truck, Clock3 } from "lucide-react";
 
 type Category = "Mutton" | "Chicken";
-type Product = { slug: string; name: string; category: Category; description: string; cuts: string[]; weights: number[]; image: string };
-type CartItem = { key: string; slug: string; cut: string; grams: number; quantity: number };
-const products: Product[] = [
-  { slug: "fresh-mutton", name: "Fresh Mutton", category: "Mutton", description: "Choose a cut and weight. Final prices and availability will be published once the catalogue is configured.", cuts: ["Curry cut", "Boneless"], weights: [250, 500, 1000], image: "/mutton.svg" },
-  { slug: "fresh-chicken", name: "Fresh Chicken", category: "Chicken", description: "Choose a cut and weight. Final prices and availability will be published once the catalogue is configured.", cuts: ["Curry cut", "Boneless"], weights: [250, 500, 1000], image: "/chicken.svg" },
-];
-const zones = ["Singanallur", "GV Residency", "Krishna Colony", "MGR Nagar"];
-function findProduct(slug: string) { return products.find(p => p.slug === slug); }
+type BackendVariant = {id:string;cut_type:string;weight_grams:number;price_paise:number;available_quantity:number|null};
+type BackendProduct = {id:string;slug:string;name:string;category:"mutton"|"chicken";description:string;image_path:string|null;product_variants:BackendVariant[]};
+type BackendZone = {id:string;name:string;postal_codes:string[];fee_paise:number};
+type BackendSlot = {id:string;zone_id:string;delivery_date:string;start_time:string;end_time:string};
+type Catalogue = {products:BackendProduct[];zones:BackendZone[];slots:BackendSlot[]};
+type Product = { slug:string;name:string;category:Category;description:string;cuts:string[];weights:number[];image:string;variants:BackendVariant[] };
+type CartItem = { key:string;slug:string;cut:string;grams:number;quantity:number };
+const fallbackImage = (slug:string) => slug === "fresh-mutton" ? "/mutton.svg" : "/chicken.svg";
+function useCatalogue() {
+ return useQuery<Catalogue>({
+  queryKey:["catalogue"],
+  queryFn:()=>backend("catalogue") as Promise<Catalogue>,
+  staleTime:60_000,
+  retry:1
+ });
+}
+function useProducts() {
+ const query=useCatalogue();
+ const products:Product[]=(query.data?.products||[]).map(p=>({
+  slug:p.slug,name:p.name,category:p.category==="mutton"?"Mutton":"Chicken",
+  description:p.description,image:p.image_path||fallbackImage(p.slug),
+  cuts:[...new Set(p.product_variants.map(v=>v.cut_type))],
+  weights:[...new Set(p.product_variants.map(v=>v.weight_grams))].sort((a,b)=>a-b),
+  variants:p.product_variants
+ }));
+ return {...query,products};
+}
+function getVariant(p:Product,cut:string,grams:number){return p.variants.find(v=>v.cut_type===cut&&v.weight_grams===grams);}
+function priceLabel(paise:number){return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR"}).format(paise/100);}
 function useCart() {
   const [cart, setCart] = useState<CartItem[]>(() => {
     try { const v = JSON.parse(localStorage.getItem("kfc-cart-v1") || "[]"); return Array.isArray(v) ? v : []; }
@@ -37,42 +59,24 @@ function Layout({ children }: { children: React.ReactNode }) {
     <main>{children}</main><footer className="footer"><div className="container footer-grid"><div><h3>KOVAI FRESH CUTS</h3><p>Fresh Cuts. Freshly Delivered.</p><p>Pre-order fresh mutton and chicken for doorstep delivery in selected Coimbatore areas.</p></div><div><h4>Explore</h4><Link to="/shop">Shop</Link><Link to="/track">Track order</Link><Link to="/contact">Contact</Link></div><div><h4>Information</h4><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/refund-policy">Refund policy</Link><Link to="/shipping-policy">Delivery policy</Link></div></div><div className="container footer-bottom">© {new Date().getFullYear()} Kovai Fresh Cuts · Service details and prices pending confirmation</div></footer></>;
 }
 function Note({ children }: { children: React.ReactNode }) { return <div className="notice" role="status">{children}</div>; }
-function Home() { return <><section className="hero"><div className="container hero-grid"><div className="hero-copy"><span className="eyebrow">COIMBATORE · PRE-ORDER DELIVERY</span><h1>Fresh cuts.<br/><em>Freshly delivered.</em></h1><p>Choose your preferred mutton or chicken cuts. Order ahead for scheduled doorstep delivery.</p><div className="hero-actions"><Link className="btn" to="/shop">Explore fresh cuts <ArrowRight size={18}/></Link><Link className="btn secondary" to="/contact">Delivery areas</Link></div><p className="fine-print">Delivery schedule, cutoff and pricing will be announced soon.</p></div><div className="hero-visual"><div className="hero-tile"><img src="/mutton.svg" alt="Illustrated mutton category"/></div><div className="hero-tile offset"><img src="/chicken.svg" alt="Illustrated chicken category"/></div><span className="hero-stamp">PRE-ORDER<br/>FRESH</span></div></div></section><section className="container section"><div className="section-head"><div><span className="eyebrow">WHAT WE OFFER</span><h2>Pick your fresh cut</h2></div><Link className="text-link" to="/shop">View all <ArrowRight size={17}/></Link></div><div className="product-grid">{products.map(p => <ProductCard key={p.slug} product={p}/>)}</div></section><section className="cream-band"><div className="container"><div className="section-head"><div><span className="eyebrow">THE SIMPLE WAY</span><h2>Freshness made easy</h2></div></div><div className="features"><div><ShoppingBasket/><h3>Choose your cuts</h3><p>Browse mutton and chicken and select your preferred cut and weight.</p></div><div><Clock3/><h3>Pre-order ahead</h3><p>Orders will follow a published delivery schedule and cutoff time.</p></div><div><Truck/><h3>Doorstep delivery</h3><p>Delivery is planned for selected Coimbatore neighbourhoods.</p></div></div></div></section></>; }
-function ProductCard({ product: p }: { product: Product }) { return <article className="product-card"><Link to={`/products/${p.slug}`}><div className="product-img"><img src={p.image} alt={`Illustration for ${p.name}`}/><span className="category-tag">{p.category}</span></div></Link><div className="product-body"><h3>{p.name}</h3><p>{p.cuts.join(" · ")}</p><div className="product-foot"><span className="price-placeholder">Price coming soon</span><Link className="small-btn" to={`/products/${p.slug}`}>Select <ArrowRight size={15}/></Link></div></div></article>; }
-function Shop() { const [filter, setFilter] = useState("All"); return <div className="container page"><span className="eyebrow">FRESH CUTS</span><h1>Shop our selection</h1><p className="lead">Discover your preferred cuts. Ordering opens after catalogue prices and delivery slots are configured.</p><div className="tabs">{["All", "Mutton", "Chicken"].map(t => <button className={filter === t ? "selected" : ""} onClick={() => setFilter(t)} key={t}>{t}</button>)}</div><div className="product-grid">{products.filter(p => filter === "All" || filter === p.category).map(p => <ProductCard key={p.slug} product={p}/>)}</div></div>; }
-function Detail() { const { slug } = useParams(); const p = findProduct(slug || ""); const [cut, setCut] = useState("Curry cut"); const [grams, setGrams] = useState(500); const navigate = useNavigate(); const { add } = cartState(); if (!p) return <NotFound/>; return <div className="container page"><Link className="back" to="/shop">← Back to shop</Link><div className="detail-grid"><div className="detail-image"><img src={p.image} alt={`Illustration for ${p.name}`}/></div><div><span className="eyebrow">{p.category} · PRE-ORDER</span><h1>{p.name}</h1><p className="lead">{p.description}</p><label className="field-label" htmlFor="cut">Cut type</label><select id="cut" value={cut} onChange={e => setCut(e.target.value)}>{p.cuts.map(c => <option key={c}>{c}</option>)}</select><p className="field-label">Choose weight</p><div className="tabs">{p.weights.map(g => <button key={g} className={grams === g ? "selected" : ""} onClick={() => setGrams(g)}>{g === 1000 ? "1 kg" : g + " g"}</button>)}</div><Note>Prices and availability have not been published. You can create a draft cart, but checkout is disabled until live prices and delivery rules are configured.</Note><button className="btn" onClick={() => { add(p.slug, cut, grams); navigate("/cart"); }}>Add to draft cart <ArrowRight size={17}/></button></div></div></div>; }
-function Cart() { const { cart, change, remove } = cartState(); return <div className="container page"><span className="eyebrow">YOUR SELECTION</span><h1>Shopping cart</h1>{cart.length === 0 ? <div className="empty"><ShoppingBasket size={42}/><h2>Your cart is empty</h2><p>Start by choosing fresh mutton or chicken.</p><Link className="btn" to="/shop">Browse products</Link></div> : <div className="checkout-grid"><div className="cart-items">{cart.map(x => { const p = findProduct(x.slug); return <div className="cart-row" key={x.key}><img src={p?.image} alt="" /><div className="grow"><h3>{p?.name}</h3><p>{x.cut} · {x.grams === 1000 ? "1 kg" : x.grams + " g"}</p><span className="muted">Price pending</span></div><div className="quantity"><button aria-label="Decrease quantity" onClick={() => change(x.key,-1)}><Minus size={14}/></button><span>{x.quantity}</span><button aria-label="Increase quantity" onClick={() => change(x.key,1)}><Plus size={14}/></button></div><button className="icon-btn" aria-label="Remove item" onClick={() => remove(x.key)}><Trash2 size={18}/></button></div>; })}</div><aside className="summary"><h2>Order summary</h2><p>Subtotal <strong>Pending prices</strong></p><p>Delivery fee <strong>Pending zone</strong></p><hr/><Note>Live checkout will only proceed after the backend confirms product prices and delivery availability.</Note><Link className="btn" to="/checkout">Continue to checkout</Link><Link className="text-link" to="/shop">Continue shopping</Link></aside></div>}</div>; }
-type BackendVariant = {id:string;cut_type:string;weight_grams:number;price_paise:number};
-type BackendProduct = {slug:string;name:string;product_variants:BackendVariant[]};
-type BackendZone = {id:string;name:string;postal_codes:string[];fee_paise:number};
-type BackendSlot = {id:string;zone_id:string;delivery_date:string;start_time:string;end_time:string};
-type Catalogue = {products:BackendProduct[];zones:BackendZone[];slots:BackendSlot[]};
-const apiBase = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\\/$/,"");
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-async function backend(path:string, body?:unknown) {
-  if(!apiBase || !anonKey) throw Error("Online ordering is not configured yet.");
-  const response=await fetch(apiBase+"/functions/v1/"+path,{
-    method:body?"POST":"GET",
-    headers:{"Content-Type":"application/json",apikey:anonKey,Authorization:"Bearer "+anonKey},
-    ...(body?{body:JSON.stringify(body)}:{})
-  });
-  const result=await response.json();
-  if(!response.ok) throw Error(result.error || "Request failed");
-  return result;
+function Home() { const {products,isLoading,error}=useProducts();return <><section className="hero"><div className="container hero-grid"><div className="hero-copy"><span className="eyebrow">COIMBATORE · PRE-ORDER DELIVERY</span><h1>Fresh cuts.<br/><em>Freshly delivered.</em></h1><p>Choose your preferred mutton or chicken cuts. Order ahead for scheduled doorstep delivery.</p><div className="hero-actions"><Link className="btn" to="/shop">Explore fresh cuts <ArrowRight size={18}/></Link><Link className="btn secondary" to="/contact">Delivery areas</Link></div><p className="fine-print">Sample catalogue for testing. Delivery schedule and real prices are not finalized.</p></div><div className="hero-visual"><div className="hero-tile"><img src="/mutton.svg" alt="Illustrated mutton category"/></div><div className="hero-tile offset"><img src="/chicken.svg" alt="Illustrated chicken category"/></div><span className="hero-stamp">PRE-ORDER<br/>FRESH</span></div></div></section><section className="container section"><div className="section-head"><div><span className="eyebrow">WHAT WE OFFER</span><h2>Pick your fresh cut</h2></div><Link className="text-link" to="/shop">View all <ArrowRight size={17}/></Link></div>{isLoading?<p role="status">Loading products…</p>:error?<Note>Products could not be loaded. Check your Supabase connection.</Note>:<div className="product-grid">{products.map(p=><ProductCard key={p.slug} product={p}/>)}</div>}</section><section className="cream-band"><div className="container"><div className="section-head"><div><span className="eyebrow">THE SIMPLE WAY</span><h2>Freshness made easy</h2></div></div><div className="features"><div><ShoppingBasket/><h3>Choose your cuts</h3><p>Browse mutton and chicken and select your preferred cut and weight.</p></div><div><Clock3/><h3>Pre-order ahead</h3><p>Orders follow a published delivery schedule and cutoff time.</p></div><div><Truck/><h3>Doorstep delivery</h3><p>Delivery is planned for selected Coimbatore neighbourhoods.</p></div></div></div></section></>; }
+function ProductCard({product:p}:{product:Product}) {
+ const minimum=p.variants.length?Math.min(...p.variants.map(v=>v.price_paise)):null;
+ return <article className="product-card"><Link to={`/products/${p.slug}`}><div className="product-img"><img src={p.image} alt={`Illustration for ${p.name}`}/><span className="category-tag">{p.category}</span></div></Link><div className="product-body"><h3>{p.name}</h3><p>{p.cuts.join(" · ")}</p><div className="product-foot"><span className="price-placeholder">{minimum===null?"Unavailable":`From ${priceLabel(minimum)} · DEMO`}</span><Link className="small-btn" to={`/products/${p.slug}`}>Select <ArrowRight size={15}/></Link></div></div></article>;
 }
-type RazorpayInstance = {open:()=>void};
-type RazorpayConstructor = new (options:Record<string,unknown>)=>RazorpayInstance;
-declare global {interface Window {Razorpay?:RazorpayConstructor}}
-async function loadRazorpay() {
-  if(window.Razorpay) return;
-  await new Promise<void>((resolve,reject)=>{
-    const script=document.createElement("script");script.src="https://checkout.razorpay.com/v1/checkout.js";
-    script.onload=()=>resolve();script.onerror=()=>reject(Error("Payment gateway could not be loaded"));document.head.appendChild(script);
-  });
+function Shop() { const [filter,setFilter]=useState("All");const {products,isLoading,error,refetch}=useProducts();return <div className="container page"><span className="eyebrow">FRESH CUTS</span><h1>Shop our selection</h1><Note>DEMO CATALOGUE — prices are for testing only. Orders and payments are not yet open.</Note><div className="tabs">{["All","Mutton","Chicken"].map(t=><button className={filter===t?"selected":""} onClick={()=>setFilter(t)} key={t}>{t}</button>)}</div>{isLoading?<p role="status">Loading live products…</p>:error?<div role="alert"><Note>Unable to load products from Supabase.</Note><button className="btn" onClick={()=>void refetch()}>Try again</button></div>:products.length===0?<Note>No products are currently published.</Note>:<div className="product-grid">{products.filter(p=>filter==="All"||filter===p.category).map(p=><ProductCard key={p.slug} product={p}/>)}</div>}</div>; }
+function Detail(){const {slug}=useParams();const {products,isLoading,error}=useProducts();const p=products.find(p=>p.slug===slug);const [selection,setSelection]=useState<{slug:string;cut:string;grams:number}|null>(null);const navigate=useNavigate();const {add}=cartState();if(isLoading)return <div className="container page">Loading product…</div>;if(error)return <div className="container page"><Note>Unable to retrieve product data.</Note></div>;if(!p)return <NotFound/>;
+ const cut=selection?.slug===p.slug&&p.cuts.includes(selection.cut)?selection.cut:p.cuts[0]||"";
+ const availableWeights=p.variants.filter(v=>v.cut_type===cut).map(v=>v.weight_grams).sort((a,b)=>a-b);
+ const grams=selection?.slug===p.slug&&selection.cut===cut&&availableWeights.includes(selection.grams)?selection.grams:availableWeights[0]||0;
+ const variant=getVariant(p,cut,grams);
+ return <div className="container page"><Link className="back" to="/shop">← Back to shop</Link><div className="detail-grid"><div className="detail-image"><img src={p.image} alt={`Illustration for ${p.name}`}/></div><div><span className="eyebrow">{p.category} · DEMO</span><h1>{p.name}</h1><p className="lead">{p.description}</p><label className="field-label" htmlFor="cut">Cut type</label><select id="cut" value={cut} onChange={e=>{const c=e.target.value;setSelection({slug:p.slug,cut:c,grams:p.variants.find(v=>v.cut_type===c)?.weight_grams||0});}}>{p.cuts.map(c=><option key={c}>{c}</option>)}</select><p className="field-label">Choose weight</p><div className="tabs">{availableWeights.map(g=><button key={g} className={grams===g?"selected":""} onClick={()=>setSelection({slug:p.slug,cut,grams:g})}>{g===1000?"1 kg":g+" g"}</button>)}</div><h2>{variant?priceLabel(variant.price_paise):"Unavailable"} <small className="muted">DEMO price</small></h2><Note>Sample prices only. This is a draft cart; delivery slots and live payment are not yet enabled.</Note><button disabled={!variant} className="btn" onClick={()=>{add(p.slug,cut,grams);navigate("/cart");}}>Add to draft cart <ArrowRight size={17}/></button></div></div></div>;
+}
+function Cart(){const {cart,change,remove}=cartState();const {products,isLoading,error}=useProducts();const subtotal=cart.reduce((sum,x)=>{const p=products.find(p=>p.slug===x.slug);return sum+(p?getVariant(p,x.cut,x.grams)?.price_paise||0:0)*x.quantity;},0);const valid=cart.length>0&&cart.every(x=>{const p=products.find(p=>p.slug===x.slug);return p&&getVariant(p,x.cut,x.grams);});return <div className="container page"><span className="eyebrow">YOUR SELECTION</span><h1>Shopping cart</h1>{cart.length===0?<div className="empty"><ShoppingBasket size={42}/><h2>Your cart is empty</h2><Link className="btn" to="/shop">Browse products</Link></div>:<div className="checkout-grid"><div className="cart-items">{cart.map(x=>{const p=products.find(p=>p.slug===x.slug);const variant=p&&getVariant(p,x.cut,x.grams);return <div className="cart-row" key={x.key}><img src={p?.image||fallbackImage(x.slug)} alt=""/><div className="grow"><h3>{p?.name||"Unavailable product"}</h3><p>{x.cut} · {x.grams===1000?"1 kg":x.grams+" g"}</p><span className="muted">{variant?`${priceLabel(variant.price_paise)} each · DEMO`:"No longer available"}</span></div><div className="quantity"><button aria-label="Decrease quantity" onClick={()=>change(x.key,-1)}><Minus size={14}/></button><span>{x.quantity}</span><button aria-label="Increase quantity" onClick={()=>change(x.key,1)}><Plus size={14}/></button></div><button className="icon-btn" aria-label="Remove item" onClick={()=>remove(x.key)}><Trash2 size={18}/></button></div>;})}</div><aside className="summary"><h2>Order summary</h2><p>Subtotal <strong>{valid&&!isLoading&&!error?priceLabel(subtotal):"Unavailable"}</strong></p><p>Delivery fee <strong>Choose at checkout</strong></p><hr/><Note>Demo subtotal only. Actual charges must be recalculated by the server. Orders remain unavailable until delivery rules and payment setup are completed.</Note>{valid&&!isLoading&&!error?<Link className="btn" to="/checkout">View checkout</Link>:<p className="muted">Update your cart before continuing.</p>}<Link className="text-link" to="/shop">Continue shopping</Link></aside></div>}</div>;
 }
 function Checkout() {
  const {cart}=cartState();
- const [catalogue,setCatalogue]=useState<Catalogue|null>(null);
+ const {data:catalogue}=useCatalogue();
  const [status,setStatus]=useState("Loading live catalogue…");
  const [busy,setBusy]=useState(false);
  const [name,setName]=useState("");const [phone,setPhone]=useState("");
@@ -80,7 +84,7 @@ function Checkout() {
  const [zone,setZone]=useState("");const [slot,setSlot]=useState("");
  const [reference,setReference]=useState("");const [confirmed,setConfirmed]=useState(false);
  const [key,setKey]=useState(()=>crypto.randomUUID());
- useEffect(()=>{backend("catalogue").then((result:Catalogue)=>{setCatalogue(result);setStatus("");}).catch((err:Error)=>setStatus(err.message));},[]);
+ useEffect(()=>{if(catalogue)setStatus("");},[catalogue]);
  const zones=catalogue?.zones || [];
  const slots=(catalogue?.slots||[]).filter(s=>s.zone_id===zone);
  const items=cart.map(x=>{
@@ -132,7 +136,7 @@ function Checkout() {
   {!ready&&<p className="muted">Checkout requires a published catalogue, valid product variants and an available delivery slot.</p>}
  </form>}</div>;
 }
-function Contact() { const wa = import.meta.env.VITE_PUBLIC_BUSINESS_WHATSAPP as string | undefined; return <div className="container page narrow"><span className="eyebrow">WE'RE LOCAL</span><h1>Contact & delivery areas</h1><p className="lead">We're preparing fresh doorstep delivery in selected Coimbatore areas.</p><div className="panel"><h2>Proposed service areas</h2><div className="zone-list">{zones.map(z => <span key={z}>{z}</span>)}</div><p className="muted">Exact streets, postal codes, delivery fees, dates and cutoff times are yet to be confirmed.</p>{wa && <a className="btn" href={`https://wa.me/${wa.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer">Message on WhatsApp</a>}</div></div>; }
+function Contact() { const wa = import.meta.env.VITE_PUBLIC_BUSINESS_WHATSAPP as string | undefined; const {data:catalogue}=useCatalogue(); const zones=catalogue?.zones.map(z=>z.name)||[]; return <div className="container page narrow"><span className="eyebrow">WE'RE LOCAL</span><h1>Contact & delivery areas</h1><p className="lead">We're preparing fresh doorstep delivery in selected Coimbatore areas.</p><div className="panel"><h2>Proposed service areas</h2><div className="zone-list">{zones.map(z => <span key={z}>{z}</span>)}</div><p className="muted">Exact streets, postal codes, delivery fees, dates and cutoff times are yet to be confirmed.</p>{wa && <a className="btn" href={`https://wa.me/${wa.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer">Message on WhatsApp</a>}</div></div>; }
 function Policies({ kind }: { kind: string }) { const headings: Record<string,string> = { privacy:"Privacy policy", terms:"Terms & conditions", "refund-policy":"Cancellation & refund policy", "shipping-policy":"Delivery policy" }; return <div className="container page narrow"><h1>{headings[kind]}</h1><Note>This policy is awaiting business-owner and legal review. No final operational terms have been published.</Note><p>For questions about ordering and delivery, please <Link to="/contact">contact Kovai Fresh Cuts</Link>.</p></div>; }
 function PrivateOrders({ title }: { title: string }) { return <div className="container page narrow"><h1>{title}</h1><Note>Secure access is not enabled yet. Customer orders will be displayed only after identity or order-reference verification is implemented.</Note><Link to="/shop" className="btn">Explore products</Link></div>; }
 function Admin() { return <div className="container page narrow"><h1>Staff dashboard</h1><Note>Admin access is disabled until Supabase Auth, staff roles and database Row Level Security are configured. No customer or order data is exposed.</Note></div>; }
