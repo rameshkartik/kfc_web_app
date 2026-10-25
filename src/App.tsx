@@ -74,6 +74,35 @@ function Detail(){const {slug}=useParams();const {products,isLoading,error}=useP
 }
 function Cart(){const {cart,change,remove}=cartState();const {products,isLoading,error}=useProducts();const subtotal=cart.reduce((sum,x)=>{const p=products.find(p=>p.slug===x.slug);return sum+(p?getVariant(p,x.cut,x.grams)?.price_paise||0:0)*x.quantity;},0);const valid=cart.length>0&&cart.every(x=>{const p=products.find(p=>p.slug===x.slug);return p&&getVariant(p,x.cut,x.grams);});return <div className="container page"><span className="eyebrow">YOUR SELECTION</span><h1>Shopping cart</h1>{cart.length===0?<div className="empty"><ShoppingBasket size={42}/><h2>Your cart is empty</h2><Link className="btn" to="/shop">Browse products</Link></div>:<div className="checkout-grid"><div className="cart-items">{cart.map(x=>{const p=products.find(p=>p.slug===x.slug);const variant=p&&getVariant(p,x.cut,x.grams);return <div className="cart-row" key={x.key}><img src={p?.image||fallbackImage(x.slug)} alt=""/><div className="grow"><h3>{p?.name||"Unavailable product"}</h3><p>{x.cut} · {x.grams===1000?"1 kg":x.grams+" g"}</p><span className="muted">{variant?`${priceLabel(variant.price_paise)} each · DEMO`:"No longer available"}</span></div><div className="quantity"><button aria-label="Decrease quantity" onClick={()=>change(x.key,-1)}><Minus size={14}/></button><span>{x.quantity}</span><button aria-label="Increase quantity" onClick={()=>change(x.key,1)}><Plus size={14}/></button></div><button className="icon-btn" aria-label="Remove item" onClick={()=>remove(x.key)}><Trash2 size={18}/></button></div>;})}</div><aside className="summary"><h2>Order summary</h2><p>Subtotal <strong>{valid&&!isLoading&&!error?priceLabel(subtotal):"Unavailable"}</strong></p><p>Delivery fee <strong>Choose at checkout</strong></p><hr/><Note>Demo subtotal only. Actual charges must be recalculated by the server. Orders remain unavailable until delivery rules and payment setup are completed.</Note>{valid&&!isLoading&&!error?<Link className="btn" to="/checkout">View checkout</Link>:<p className="muted">Update your cart before continuing.</p>}<Link className="text-link" to="/shop">Continue shopping</Link></aside></div>}</div>;
 }
+
+const apiBase = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, "");
+const publicKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+async function backend(path: string, body?: unknown): Promise<any> {
+  if (!apiBase || !publicKey) throw new Error("Supabase configuration is missing. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env, then restart npm run dev.");
+  const response = await fetch(`${apiBase}/functions/v1/${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { "apikey": publicKey, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) })
+  });
+  let result: any;
+  try { result = await response.json(); } catch { throw new Error("Unexpected response from Supabase (" + response.status + ")"); }
+  if (!response.ok) throw new Error(result?.error || result?.message || "Supabase request failed (" + response.status + ")");
+  return result;
+}
+type RazorpayInstance = { open: () => void };
+type RazorpayConstructor = new (options: Record<string,unknown>) => RazorpayInstance;
+declare global { interface Window { Razorpay?: RazorpayConstructor } }
+async function loadRazorpay(): Promise<void> {
+  if (window.Razorpay) return;
+  await new Promise<void>((resolve,reject) => {
+    const script=document.createElement("script");
+    script.src="https://checkout.razorpay.com/v1/checkout.js";
+    script.onload=()=>resolve();
+    script.onerror=()=>reject(new Error("Payment gateway could not be loaded"));
+    document.head.appendChild(script);
+  });
+}
+
 function Checkout() {
  const {cart}=cartState();
  const {data:catalogue}=useCatalogue();
