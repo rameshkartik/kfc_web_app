@@ -34,3 +34,11 @@
 4. `npm run dev` and open `/shop`.
 
 This development integration has not been independently built or browser-tested in this session.
+
+## Sunday-only schedule (October 26, 2026)
+- Migration `202610260001_sunday_only_delivery.sql` must be applied in Supabase SQL Editor.
+- Active delivery slots restricted to Sundays (database triggers); weekday slots deactivated.
+- Store setting `ordering_rules.delivery_days=[7]` (`7` = Sunday) and timezone `Asia/Kolkata`.
+- Delivery cutoff, time windows, capacity, delivery fees and eligible PIN codes remain owner decisions.
+- No orders can proceed until owner-approved cutoff is configured and real Sunday slots are added.
+- Redeploy `catalogue` Edge Function to filter API slots to Sundays, and pull frontend changes.
