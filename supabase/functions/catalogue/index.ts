@@ -29,7 +29,12 @@ Deno.serve(async (req) => {
       db.from("delivery_slots").select("id,delivery_date,start_time,end_time,zone_id,capacity").eq("active", true).gte("delivery_date", new Date().toISOString().slice(0, 10))
     ]);
     if (products.error || zones.error || slots.error) return reply({ error: "Catalogue temporarily unavailable" }, 503);
-    const sundaySlots = (slots.data || []).filter(slot => new Date(slot.delivery_date + "T12:00:00Z").getUTCDay() === 0);
+    const sundaySlots = (slots.data || []).filter(slot => {
+      const sunday = new Date(slot.delivery_date + "T12:00:00Z").getUTCDay() === 0;
+      const correctHours = slot.start_time.startsWith("07:00") && slot.end_time.startsWith("12:00");
+      const cutoff = Date.parse(slot.delivery_date + "T07:00:00+05:30") - 13 * 60 * 60 * 1000;
+      return sunday && correctHours && Number.isFinite(cutoff) && Date.now() < cutoff;
+    });
     return reply({ products: products.data, zones: zones.data, slots: sundaySlots });
   } catch {
     return reply({ error: "Catalogue unavailable" }, 500);
