@@ -42,3 +42,14 @@ This development integration has not been independently built or browser-tested 
 - Delivery cutoff, time windows, capacity, delivery fees and eligible PIN codes remain owner decisions.
 - No orders can proceed until owner-approved cutoff is configured and real Sunday slots are added.
 - Redeploy `catalogue` Edge Function to filter API slots to Sundays, and pull frontend changes.
+
+## Confirmed pre-order settings (2026-10-26)
+- New migration: `202610260002_saturday_cutoff_sunday_delivery.sql` (run after `202610260001_sunday_only_delivery.sql`).
+- Close pre-orders **Saturday at 18:00 IST**, each week.
+- Deliver **Sunday from 07:00 to 12:00 IST**.
+- Cap **50 orders total per Sunday, across all delivery zones** (not per zone).
+- Migration enforces restrictions via database triggers, updates settings, adjusts order RPC timezone, and creates up to 8 forthcoming Sunday slots per active zone.
+- Delivery dates beyond the initial horizon need routine slot generation.
+- Frontend and catalogue function updated; redeploy the catalogue Edge Function.
+- PIN code coverage is currently unconfigured and demo catalogue prices must not be used for sales.
+- No real checkout or payments until server functions and payment verification are secured, deployed and tested.
