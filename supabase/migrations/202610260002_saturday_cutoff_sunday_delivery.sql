@@ -110,9 +110,9 @@ from generate_series(0,7) as n
 cross join public.delivery_zones z
 where z.active = true
 and now() < (
-  (date_trunc('week',now() at time zone 'Asia/Kolkata')::date + 5 + 7*n)::date
-    + time '18:00'
-) at time zone 'Asia/Kolkata'
+  ((date_trunc('week',now() at time zone 'Asia/Kolkata')::date + 5 + 7*n)::date
+    + time '18:00') at time zone 'Asia/Kolkata'
+)
 on conflict (delivery_date,start_time,end_time,zone_id)
 do update set capacity=50,active=true;
 
